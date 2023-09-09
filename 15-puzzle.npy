@@ -1,0 +1,295 @@
+################################################################################
+# @brief       : 15 Puzzle for Oxocard
+# @author      : Jacques Supcik <jacques.supcik@hefr.ch>
+# @date        : 9. September 2023
+# ------------------------------------------------------------------------------
+# @copyright   : Copyright (c) 2023 HEIA-FR / ISC
+#                Haute école d'ingénierie et d'architecture de Fribourg
+#                Informatique et Systèmes de Communication
+# @attention   : SPDX-License-Identifier: MIT OR Apache-2.0
+################################################################################
+
+const PUZZLE_SIZE_X = 4 # 3..5
+const PUZZLE_SIZE_Y = 4 # 3..5
+const N_OF_TILES = PUZZLE_SIZE_X * PUZZLE_SIZE_Y - 1
+
+const MARGIN_X = 10
+const MARGIN_Y = 10
+
+const PADDING_X = 5
+const PADDING_Y = 5
+
+const TILE_W = (240 - 2*MARGIN_X) / PUZZLE_SIZE_X - PADDING_X
+const TILE_H = (240 - 2*MARGIN_Y) / PUZZLE_SIZE_Y - PADDING_Y
+
+const SHUFFLE_ITERATIONS = 6 # 1..8
+const SHUFFLE_BATCH = 500
+
+const MOVE_UP = 0
+const MOVE_DOWN = 1
+const MOVE_LEFT = 2
+const MOVE_RIGHT = 3
+
+const GAME_STARTING = 0
+const GAME_RUNNING = 1
+const GAME_OVER = 2
+
+red = color(r=255, g=0, b=0)
+white = color(r=255, g=255, b=255)
+black = color(r=0, g=0, b=0)
+state = GAME_STARTING
+
+# xPos returns the horizontal pixel position of a pos
+def xPos(pos: vector) -> float:
+    return MARGIN_X + pos.x * (TILE_W + PADDING_X)
+
+# yPos returns the vertical pixel position of a pos
+def yPos(pos: vector) -> float
+    return MARGIN_Y + pos.y * (TILE_H + PADDING_Y)
+
+# ShowPannel displays an information pannel in the middle of the screen
+def ShowPannel(text:byte[]):
+    noStroke()
+    fill(0,0,255)
+    drawRectangle(20, 90 , 200, 60)
+    stroke(255,255,255)
+    textFont(FONT_ROBOTO_24)
+    drawTextCentered(120, 120, text)
+    update()
+
+# Tile class represent a tile (or a piece of the puzzle)
+class Tile:
+    id:int
+
+    # IsRed returns true if the tile must have a red background
+    def IsRed() -> bool:
+        if PUZZLE_SIZE_X % 2 == 1: # if PUZZLE_SIZE_X is even
+            return (id % 2) == 1
+        if ((id - 1) / PUZZLE_SIZE_X % 2) == 0: # even row
+            return (id % 2) == 1
+        # odd row
+        return (id % 2) == 0
+
+    # Draw draws the tile at the given grid position
+    def Draw(pos: vector):
+        if IsRed():
+            bgColor = red
+            fgColor = white
+        else:
+            bgColor = white
+            fgColor = black
+
+        x = xPos(pos)
+        y = yPos(pos)
+        noStroke()
+        bgColor.fill()
+        drawRectangle(x, y, TILE_W, TILE_H)
+        fgColor.stroke()
+        
+        if PUZZLE_SIZE_X > 4 or PUZZLE_SIZE_Y > 4:
+            textFont(FONT_ROBOTO_BOLD_24)
+        elif PUZZLE_SIZE_X < 4 and PUZZLE_SIZE_Y < 4:
+            textFont(FONT_ROBOTO_BOLD_48)
+        else:
+            textFont(FONT_ROBOTO_BOLD_32)
+        drawTextCentered(x + TILE_W/2, y + TILE_H/2, id)
+        update()
+
+# Puzzle represents the puzzle grid
+class Puzzle:
+    tiles: Tile[N_OF_TILES]
+    grid: byte[PUZZLE_SIZE_X*PUZZLE_SIZE_Y]
+    hole: byte
+
+    # Init initializes the puzzle
+    def Init():
+        for i in N_OF_TILES:
+            tiles[i] = Tile(id=i+1)
+            grid[i] = i
+        hole = N_OF_TILES
+        randomSeed(getMillis())
+
+    # ClearTile clears the tile at the given position
+    def ClearTile(pos: vector):
+        x = xPos(pos)
+        y = yPos(pos)
+        noStroke()
+        fill(0,0,0)
+        drawRectangle(x, y, TILE_W, TILE_H)
+        update()
+
+    # HoleX returns the x position of the hole
+    def HoleX() -> int:
+        return hole % PUZZLE_SIZE_X
+
+    # HoleY returns the y position of the hole
+    def HoleY() -> int:
+        return hole / PUZZLE_SIZE_X
+
+    # Up returns the index of the cell if the user chooses to move up
+    def Up() -> int:
+        if HoleY() >= PUZZLE_SIZE_Y - 1
+            return -1
+        else:
+            return hole + PUZZLE_SIZE_X
+
+    # Down returns the index of the cell if the user chooses to move down
+    def Down() -> int:
+        if HoleY() < 1
+            return -1
+        else:
+            return hole - PUZZLE_SIZE_X
+
+    # Left returns the index of the cell if the user chooses to move left
+    def Left() -> int:
+        if HoleX() >= PUZZLE_SIZE_X - 1
+            return -1
+        else:
+            return hole + 1
+    
+    # Right returns the index of the cell if the user chooses to move right
+    def Right() -> int:
+        if HoleX() < 1
+            return -1
+        else:
+            return hole - 1
+
+    # Shuffle shuffles the puzzle n times. It actually do n moves and
+    # make sure that no move is the direct oposite of the previous one
+    def Shuffle(n):
+        choices: int[4]
+        moves: int[4]
+        from = -1
+        for i in n:
+            size = 0
+            if from != MOVE_DOWN:
+                p = Up()
+                if p >= 0:
+                    choices[size] = p
+                    moves[size] = MOVE_UP
+                    size++
+            if from != MOVE_UP:
+                p = Down()
+                if p >= 0:
+                    choices[size] = p
+                    moves[size] = MOVE_DOWN
+                    size++
+            if from != MOVE_RIGHT:
+                p = Left()
+                if p >= 0:
+                    choices[size] = p
+                    moves[size] = MOVE_LEFT
+                    size++
+            if from != MOVE_LEFT:
+                p = Right()
+                if p >= 0:
+                    choices[size] = p
+                    moves[size] = MOVE_RIGHT
+                    size++
+            r = random(0,size)
+            p = choices[r]
+            lastHole = hole
+            grid[hole] = grid[p]
+            from = moves[r]
+            hole = p
+
+    # DrawPuzzle draws the whole puzzle
+    def DrawPuzzle():
+        for y in PUZZLE_SIZE_Y:
+            for x in PUZZLE_SIZE_X:
+                i = y * PUZZLE_SIZE_X + x
+                if i == hole
+                    ClearTile(vector(x=x, y=y))
+                else:
+                    tiles[grid[i]].Draw(vector(x=x, y=y))
+    
+    # Solved return true if the puzzle is solved
+    def Solved() -> bool:
+        if hole != N_OF_TILES:
+            return false
+        for i in N_OF_TILES:
+            if grid[i] != i:
+                return false
+        return true
+
+# ----- Main program -----
+
+puzzle = Puzzle()
+puzzle.Init()
+puzzle.DrawPuzzle()
+ShowPannel("Press to shuffle")
+
+lastClick:long = -1 # Used to debounce the button
+
+# ----- Event handlers -----
+
+# HandleStartingState handles the starting state
+def HandleStartingState(b:buttons):
+    if b.middle:
+        clear()
+        soundEffect(SOUND_BLUB)
+        for i in SHUFFLE_ITERATIONS:
+            puzzle.Shuffle(SHUFFLE_BATCH)
+            puzzle.DrawPuzzle()
+        state = GAME_RUNNING
+        soundEffect(SOUND_STARTUP)
+    else:
+        returnToMenu()
+
+# HandleRunningState handles the state when the puzzle is running
+def HandleRunningState(b:buttons):
+    if b.left:
+        p = puzzle.Left()
+    elif b.right:
+        p = puzzle.Right()
+    elif b.up:
+        p = puzzle.Up()
+    elif b.down:
+        p = puzzle.Down()
+    elif b.middle:
+        returnToMenu()
+        return
+    else:
+        return
+    
+    if p < 0:
+        return
+    
+    lastHole = puzzle.hole
+    puzzle.grid[puzzle.hole] = puzzle.grid[p]
+    puzzle.hole = p
+    puzzle.ClearTile(vector(x=puzzle.hole%PUZZLE_SIZE_X, y=puzzle.hole/PUZZLE_SIZE_X))
+    puzzle.tiles[puzzle.grid[lastHole]].Draw(vector(x=lastHole%PUZZLE_SIZE_X, y=lastHole/PUZZLE_SIZE_X))
+
+    if puzzle.Solved():
+        soundEffect(SOUND_LEVEL)
+        delay(1000)
+        ShowPannel("SOLVED !")
+        state = GAME_OVER
+
+# HandleGameOverState handles the game over state
+def HandleGameOverState(b:buttons):
+    if returnToMenu():
+        return
+    clear()
+    puzzle.Init()
+    for i in SHUFFLE_ITERATIONS:
+        puzzle.Shuffle(SHUFFLE_BATCH)
+        puzzle.DrawPuzzle()
+    state = GAME_RUNNING
+    soundEffect(SOUND_STARTUP)
+
+# onClick is the main button handler
+def onClick():
+    now = millis()
+    if now  - lastClick < 100: # Debouncing
+        return
+    lastClick = now
+    b:buttons = getButtons()
+
+    if state == GAME_STARTING:
+        HandleStartingState(b)
+    elif state == GAME_RUNNING:
+        HandleRunningState(b)
+    elif state == GAME_OVER:
+        HandleGameOverState(b)
